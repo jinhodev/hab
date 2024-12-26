@@ -38,25 +38,43 @@ class SupabaseService {
         .from('transactions')
         .select()
         .eq('user_id', userId)
-        .order('date', ascending: false);
+        .order('date', ascending: false)
+        .limit(100);
 
     return (response as List)
         .map((data) => Transaction.fromJson(Map<String, dynamic>.from(data)))
         .toList();
   }
 
-  Future<void> addTransaction(Transaction transaction) async {
+  Future<Transaction> addTransaction(Transaction transaction) async {
     final userId = supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
-    await supabase.from('transactions').insert({
-      'user_id': userId,
-      'title': transaction.title,
-      'amount': transaction.amount,
-      'category': transaction.category,
-      'date': transaction.date.toIso8601String(),
-      'is_expense': transaction.isExpense,
-    });
+    try {
+      final response = await supabase
+          .from('transactions')
+          .insert({
+            'user_id': userId,
+            'title': transaction.title,
+            'amount': transaction.amount,
+            'category': transaction.category,
+            'date': transaction.date.toIso8601String(),
+            'is_expense': transaction.isExpense,
+          })
+          .select()
+          .single();
+
+      print('Response from Supabase: $response'); // 디버깅용
+
+      if (response == null) {
+        throw Exception('Failed to add transaction');
+      }
+
+      return Transaction.fromJson(Map<String, dynamic>.from(response));
+    } catch (e) {
+      print('Error in addTransaction: $e'); // 디버깅용
+      rethrow;
+    }
   }
 
   // 카테고리 관련 메서드
@@ -106,5 +124,22 @@ class SupabaseService {
         .eq('user_id', userId)
         .eq('name', name)
         .eq('is_expense', isExpense);
+  }
+
+  Future<void> deleteTransaction(Transaction transaction) async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('Not authenticated');
+
+    try {
+      await supabase.from('transactions').delete().match({
+        'id': transaction.id,
+        'user_id': userId,
+      });
+
+      // 성공적으로 삭제되면 여기까지 실행됨
+    } catch (e) {
+      print('Error in deleteTransaction: $e');
+      rethrow;
+    }
   }
 }

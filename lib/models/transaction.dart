@@ -1,4 +1,5 @@
 class Transaction {
+  final String id;
   final String title;
   final int amount;
   final String category;
@@ -6,6 +7,7 @@ class Transaction {
   final bool isExpense;
 
   Transaction({
+    required this.id,
     required this.title,
     required this.amount,
     required this.category,
@@ -25,6 +27,7 @@ class Transaction {
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
+      id: json['id'].toString(),
       title: json['title'],
       amount: json['amount'],
       category: json['category'],

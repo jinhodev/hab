@@ -12,6 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'constants/supabase_constants.dart';
 import 'pages/settings_page.dart';
 import 'services/supabase_service.dart';
+import 'pages/analytics_page.dart';
+import 'constants/colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,27 +106,31 @@ class _ExpenseCalendarPageState extends State<ExpenseCalendarPage> {
   @override
   void initState() {
     super.initState();
-    // 데이터 로드
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final provider = context.read<TransactionProvider>();
-      await provider.loadInitialData();
-    });
+    // 삭제: 여기서는 데이터를 다시 로드하지 않음
+    // WidgetsBinding.instance.addPostFrameCallback((_) async {
+    //   final provider = context.read<TransactionProvider>();
+    //   await provider.loadInitialData();
+    // });
   }
 
   void _showTransactionsForDate(DateTime date) {
-    final transactions = context
-        .read<TransactionProvider>()
-        .getTransactionsForDate(date)
-        .where((t) => t.isExpense == _isExpense)
-        .toList();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => TransactionListSheet(
-        date: date,
-        transactions: transactions,
-        isExpense: _isExpense,
+      builder: (context) => Consumer<TransactionProvider>(
+        builder: (context, provider, child) {
+          return TransactionListSheet(
+            date: date,
+            transactions: provider
+                .getTransactionsForDate(date)
+                .where((t) => t.isExpense == _isExpense)
+                .toList(),
+            isExpense: _isExpense,
+            onDelete: () {
+              setState(() {});
+            },
+          );
+        },
       ),
     );
   }
@@ -203,6 +209,24 @@ class _ExpenseCalendarPageState extends State<ExpenseCalendarPage> {
     );
   }
 
+  Widget _buildTotalAmount() {
+    return Consumer<TransactionProvider>(
+      builder: (context, provider, child) {
+        final total =
+            provider.getTotalForMonth(_focusedDay, isExpense: _isExpense);
+        return Text(
+          '${_currencyFormat.format(total.abs())}원',
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -1.0,
+            color: Colors.white,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
@@ -233,41 +257,26 @@ class _ExpenseCalendarPageState extends State<ExpenseCalendarPage> {
                 },
               ),
               ListTile(
-                enabled: false,
                 leading: const Icon(
                   Icons.analytics_outlined,
-                  color: Colors.grey,
+                  color: Colors.white,
                 ),
-                title: Row(
-                  children: [
-                    const Text(
-                      '분석',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF404040),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        '개발중',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
+                title: const Text(
+                  '분석',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
                 ),
-                onTap: null,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AnalyticsPage(),
+                    ),
+                  );
+                },
               ),
               ListTile(
                 leading: const Icon(
@@ -336,45 +345,35 @@ class _ExpenseCalendarPageState extends State<ExpenseCalendarPage> {
                       // 총 지출/수입 표시
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              '${_focusedDay.month}월 ',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFFC7C7C7),
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  '${_focusedDay.month}월 ',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFFC7C7C7),
+                                  ),
+                                ),
+                                Text(
+                                  '총 ${_isExpense ? '지출' : '수입'}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _isExpense
+                                        ? AppColors.primary
+                                        : AppColors.secondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '총 ${_isExpense ? '지출' : '수입'}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: _isExpense
-                                    ? const Color(0xFFFF6666)
-                                    : const Color(0xFF438BFF),
-                              ),
-                            ),
+                            const SizedBox(height: 2),
+                            _buildTotalAmount(),
+                            const SizedBox(height: 10),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          children: [
-                            Text(
-                              '${_currencyFormat.format(total.abs())}원',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -1.0,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
                       // 달력
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),

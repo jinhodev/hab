@@ -25,6 +25,9 @@ class TransactionProvider with ChangeNotifier {
     '기타수입',
   ];
 
+  // 캐시 추가
+  final Map<String, List<Transaction>> _dateTransactionsCache = {};
+
   List<Transaction> get transactions => _transactions;
   List<String> get expenseCategories => _expenseCategories;
   List<String> get incomeCategories => _incomeCategories;
@@ -74,8 +77,8 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 거래 내역을 먼저 로드
       _transactions = await _supabaseService.getTransactions();
+      _clearCache(); // 캐시 초기화
 
       // 그 다음 카테고리 로드
       _expenseCategories =
@@ -96,17 +99,25 @@ class TransactionProvider with ChangeNotifier {
   }
 
   List<Transaction> getTransactionsForDate(DateTime date) {
-    return _transactions.where((transaction) {
-      return transaction.date.year == date.year &&
-          transaction.date.month == date.month &&
-          transaction.date.day == date.day;
-    }).toList();
+    final key = '${date.year}-${date.month}-${date.day}';
+
+    if (!_dateTransactionsCache.containsKey(key)) {
+      _dateTransactionsCache[key] = _transactions.where((transaction) {
+        return transaction.date.year == date.year &&
+            transaction.date.month == date.month &&
+            transaction.date.day == date.day;
+      }).toList();
+    }
+
+    return _dateTransactionsCache[key]!;
   }
 
   Future<void> addTransaction(Transaction transaction) async {
     try {
-      await _supabaseService.addTransaction(transaction);
-      _transactions.add(transaction);
+      final savedTransaction =
+          await _supabaseService.addTransaction(transaction);
+      _transactions.add(savedTransaction);
+      _clearCache();
       notifyListeners();
     } catch (e) {
       print('Error adding transaction: $e');
@@ -162,7 +173,55 @@ class TransactionProvider with ChangeNotifier {
         .fold(0, (sum, transaction) => sum + transaction.amount);
   }
 
+  int getTotalForPreviousMonth(DateTime date, {required bool isExpense}) {
+    final previousMonth = DateTime(date.year, date.month - 1);
+    return _transactions
+        .where((transaction) =>
+            transaction.date.year == previousMonth.year &&
+            transaction.date.month == previousMonth.month &&
+            transaction.isExpense == isExpense)
+        .fold(0, (sum, transaction) => sum + transaction.amount);
+  }
+
   Future<void> refreshTransactions() async {
     await loadInitialData();
+  }
+
+  Map<String, int> getCategoryTotals(DateTime date, {required bool isExpense}) {
+    final Map<String, int> totals = {};
+
+    _transactions
+        .where((t) =>
+            t.date.year == date.year &&
+            t.date.month == date.month &&
+            t.isExpense == isExpense)
+        .forEach((t) {
+      totals[t.category] = (totals[t.category] ?? 0) + t.amount.abs();
+    });
+
+    return totals;
+  }
+
+  Future<void> deleteTransaction(Transaction transaction) async {
+    try {
+      // 먼저 로컬 상태 업데이트
+      _transactions.removeWhere((t) => t.id == transaction.id);
+      _clearCache();
+      notifyListeners();
+
+      // 서버에서 삭제
+      await _supabaseService.deleteTransaction(transaction);
+    } catch (e) {
+      // 실패 시 서버에서 다시 로드
+      _transactions = await _supabaseService.getTransactions();
+      _clearCache();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // 캐시 초기화 추가
+  void _clearCache() {
+    _dateTransactionsCache.clear();
   }
 }

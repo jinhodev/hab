@@ -20,6 +20,7 @@ dependencies:
   supabase_flutter: ^1.10.25
   shared_preferences: ^2.2.2
   path_provider: ^2.1.2
+  fl_chart: ^0.66.2
 
 dev_dependencies:
   flutter_test:

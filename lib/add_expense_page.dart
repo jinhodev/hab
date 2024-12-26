@@ -4,6 +4,7 @@ import 'models/transaction.dart';
 import 'providers/transaction_provider.dart';
 import 'package:intl/intl.dart';
 import 'widgets/add_category_dialog.dart';
+import 'dart:math';
 
 class AddExpensePage extends StatefulWidget {
   final DateTime selectedDate;
@@ -94,28 +95,23 @@ class _AddExpensePageState extends State<AddExpensePage> {
     });
 
     _amountController.addListener(() {
-      String text = _amountController.text;
-      if (text.isEmpty) return;
+      if (_amountController.text.isEmpty) return;
 
-      text = text.replaceAll(',', '').replaceAll('원', '');
+      String text = _amountController.text.replaceAll(',', '');
       if (text.isEmpty) return;
 
       if (int.tryParse(text) == null) return;
 
-      final cursorPosition = _amountController.selection.start;
-
       final formattedNumber = NumberFormat('#,###').format(int.parse(text));
 
       if (_amountController.text != formattedNumber) {
-        _amountController.text = formattedNumber;
-
-        if (cursorPosition != -1) {
-          final newPosition =
-              cursorPosition + (formattedNumber.length - text.length);
-          _amountController.selection = TextSelection.fromPosition(
-            TextPosition(offset: newPosition),
-          );
-        }
+        final cursorPosition = _amountController.selection.baseOffset;
+        _amountController.value = TextEditingValue(
+          text: formattedNumber,
+          selection: TextSelection.collapsed(
+            offset: max(0, min(formattedNumber.length, cursorPosition)),
+          ),
+        );
       }
     });
   }
@@ -128,7 +124,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
     super.dispose();
   }
 
-  void _addTransaction() {
+  Future<void> _addTransaction() async {
     if (_titleController.text.isEmpty ||
         _amountController.text.isEmpty ||
         _selectedCategory == null) {
@@ -146,30 +142,38 @@ class _AddExpensePageState extends State<AddExpensePage> {
       return;
     }
 
-    final transaction = Transaction(
-      title: _titleController.text,
-      amount: _isExpense ? -amount : amount,
-      category: _selectedCategory!,
-      date: widget.selectedDate,
-      isExpense: _isExpense,
-    );
+    try {
+      final transaction = Transaction(
+        id: '-1',
+        title: _titleController.text,
+        amount: _isExpense ? -amount : amount,
+        category: _selectedCategory!,
+        date: widget.selectedDate,
+        isExpense: _isExpense,
+      );
 
-    context.read<TransactionProvider>().addTransaction(transaction);
+      await context.read<TransactionProvider>().addTransaction(transaction);
 
-    // 성공 메시지 표시
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isExpense ? '지출이 추가되었습니다.' : '수입이 추가되었습니다.',
-          style: const TextStyle(color: Colors.white),
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isExpense ? '지출이 추가되었습니다.' : '수입이 추가되었습니다.',
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor:
+              _isExpense ? const Color(0xFFFF6666) : const Color(0xFF438BFF),
+          duration: const Duration(seconds: 1),
         ),
-        backgroundColor:
-            _isExpense ? const Color(0xFFFF6666) : const Color(0xFF438BFF),
-        duration: const Duration(seconds: 1), // 1초 동안 표시
-      ),
-    );
-
-    Navigator.pop(context);
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('추가에 실패했습니다. 다시 시도해주세요.')),
+      );
+    }
   }
 
   // 카테고리 추가 메서드 수정
